@@ -6,6 +6,7 @@ set(CMAKE_BUILD_TYPE "Release")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -g")
 set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -dc 
     -gencode=arch=compute_60,code=sm_60 
+    -gencode=arch=compute_61,code=sm_61 
     -gencode=arch=compute_70,code=sm_70 
     -gencode=arch=compute_75,code=sm_75 
     -gencode=arch=compute_80,code=sm_80 

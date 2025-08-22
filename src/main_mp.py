@@ -109,42 +109,15 @@ def main(args):
             downscale=1.0, shorter_side=None, start_frame=start_frame, step=step, 
             mono_type='depth_any2', normal_type='normal_m3dv2')
     
-
-    # for segmentation 
-    # RUN_SEGMENT = False # <<<<<<<<<<<
     # for tracking
     USE_gtD = args.use_gtD
     RUN_TRACK = True # <<<<<<<<<<<
     # for vis and eval
     RUN_VIS = True
-    RUN_EVAL = True
+    RUN_EVAL = True # if true, you must run vis first to get the poses
     # whether to create video for segementation and pose estimation
     SAVE_VIDEO = False
 
-
-    # if RUN_SEGMENT:
-    #     crop_size_seg = -1
-    #     if max(W, H) >= 1024:
-    #         crop_size_seg = 768
-    #     args_XMem = argparse.Namespace(
-    #         xmem_model=f'/home/zilong/BundelSDF/XMem/saves/XMem-s012.pth', 
-    #         max_mid_term_frames=10, min_mid_term_frames=5, max_long_term_elements=1000, 
-    #         num_prototypes=128, top_k=30, mem_every=10, deep_update_every=-1, 
-    #         enable_long_term=True, crop_size=crop_size_seg
-    #         )
-    #     config_XMem = vars(args_XMem)
-
-    #     # set output dir
-    #     out_dir_segment = f"{out_dir}/masks_net"
-    #     vis_dir_segment = f"{out_dir}/rgb_mask_vis"
-    #     os.system(f'rm -rf {out_dir_segment} && mkdir -p {out_dir_segment}')
-    #     os.system(f'rm -rf {vis_dir_segment} && mkdir -p {vis_dir_segment}')
-
-    #     logging.info(f"Segmenting images by XMem network...")
-    #     eval_XMem.eval_XMem(config_XMem, f"{video_dir}/rgb", f"{video_dir}/masks", 
-    #                         out_dir_segment, vis_dir_segment)
-    #     if SAVE_VIDEO:
-    #         save_video(video_name="mask_vis", frames_dir=vis_dir_segment)
 
     if USE_gtD:
         out_dir_pose_global = out_dir_pose_global+'_gtD'
@@ -219,21 +192,6 @@ def main(args):
             out_dir_pose_global, out_dir_scale, num_frames, reader, frame_manager
             )
         # # np.save(f'{out_dir}/result_files/Dscale.npy', all_Dscale) # save all depth scale as npy
-        
-        # # plot the scale factors
-        # fig, ax = plt.subplots(figsize=(6, 6))
-        # ax.set_title('Scale and Shift')
-        # ax.plot(all_Dscale[:, 0], label='Scale', color='blue')
-        # ax.set_ylabel('Scale', color='blue')
-        # ax.tick_params(axis='y', labelcolor='blue')
-        # ax2 = ax.twinx()
-        # ax2.plot(all_Dscale[:, 1], label='Shift', color='red')
-        # ax2.set_ylabel('Shift', color='red')
-        # ax2.tick_params(axis='y', labelcolor='red')
-        # plt.savefig(f'{log_dir_seq}/scale_factors_{exp_name}.png')
-        # plt.close()
-
-        
         
 
 
@@ -338,7 +296,7 @@ if __name__ == "__main__":
             default="/media/zilong/Documents/MasterProject/BEHAVE/Date02")
         # ycbineoat | behave/date02 | ho3d
         parser.add_argument('--out_base_dir', type=str, 
-            default="/tmp/behave/date02")
+            default="/home/zilong/tmp/behave/date02")
         parser.add_argument('--use_gtD', action='store_true', default=False)
         parser.add_argument('--exp_name', type=str, default="ablation_wo_disp")
         

@@ -56,9 +56,7 @@ def run_loftr_then_PnP(
     image1, mask1, depth1, normal1, f_name1 = reader.get_frame_pkg(file_idx1, use_gtD)
 
     K = reader.K
-    norm_factor_2d = np.array([K[0][2], K[1][2]])[None]
-    # W, H = reader.W, reader.H
-    # seq_name = reader.seq_name
+    # norm_factor_2d = np.array([K[0][2], K[1][2]])[None]
 
     print("\n")
     logging.info(f"============ [Iter {f_iter}] Processing pair {file_idx0}->{file_idx1} ({f_name0}->{f_name1}) ============")
@@ -111,10 +109,6 @@ def run_loftr_then_PnP(
             _frame_0.set_global_pose(np.eye(4))
 
         # ****************
-        # sift_feature = get_sift_feature(image0, mask0)
-        # _frame_0.sift_feature = sift_feature
-        # gt_rot = make_Rot_so3(reader.get_gt_pose(file_idx0)[:3, :3])
-        # _frame_0.gt_rot = gt_rot
         # valid_depth0 = depth0[mask0]
         # thres_high0 = np.percentile(depth0[mask0], 95)
         # use mean + 3 sigma
@@ -262,10 +256,6 @@ def run_loftr_then_PnP(
     _frame_1.set_scaleAndShift(a1, b1)
 
     # ****************
-    # sift_feature = get_sift_feature(image1, mask1)
-    # _frame_1.sift_feature = sift_feature
-    # gt_rot = make_Rot_so3(reader.get_gt_pose(file_idx1)[:3, :3])
-    # _frame_1.gt_rot = gt_rot
     # _frame_1.max_depth = thres_high1
     # logging.info(f"[Frame {f_id1}] - max_depth = {thres_high1:.2f}")
     # ****************
@@ -296,8 +286,12 @@ def run_loftr_then_PnP(
     # Reminder: Global Pose -- (q0,t0)-CamW_T_Cam_i-1 and (q1,t1)-CamW_T_Cam_i
     
     # NOTE lambda for losses: spatial-3d, reproj-2d, disparity-z^-1
-    weights = np.array([5.0, 80.0, 20.0]) # YCB, HO3D
-    # weights = np.array([5.0, 100.0, 25.0]) # BEHAVE
+    # weights = np.array([5.0, 80.0, 20.0]) # YCB, HO3D
+    weights = np.array([5.0, 100.0, 25.0]) # BEHAVE
+    # *********** ablation study ************
+    # remove disparity loss
+    weights[2] = 0.0
+    # ***************************************
     loss_thres = np.array([1.0, 2.0, 1.0])
 
     # *********** ablation study ************
@@ -384,8 +378,8 @@ def run_loftr_then_PnP(
     #     f"iter{f_id0}_after_BA", f"{LOG_DIR}/{seq_name}/BA_corres")
 
     # optimized relative scale and shift
-    a0_new, b0_new = _frame_0.scaleAndShift
-    a1_new, b1_new = _frame_1.scaleAndShift
+    # a0_new, b0_new = _frame_0.scaleAndShift
+    # a1_new, b1_new = _frame_1.scaleAndShift
 
     keyframe_manager.check_and_add_keyframe(f_id1)
 

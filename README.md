@@ -35,15 +35,16 @@ Coming soon...
 
 ### Environment setup
 
-We suggest to use conda environment. Our code is tested under python 3.8.10.
+We suggest to use the conda environment. Our code is tested under python 3.8.10.
 
 ```bash
-# necessay building tools
-sudo apt-get install cmake
+# necessary building tools
+sudo apt-get install cmake libgoogle-glog-dev libgflags-dev libatlas-base-dev libeigen3-dev
 
 # conda env
 conda create -n monotracker python=3.8.10
 conda activate monotracker
+conda install -c conda-forge pybind11
 
 # select the version according to your CUDA driver
 python -m pip install torch==2.1.1 torchvision==0.16.1 --index-url https://download.pytorch.org/whl/cu121
@@ -69,6 +70,23 @@ rm ceres-solver-2.1.0.tar.gz
 mkdir ceres-bin && cd ceres-bin
 cmake ../ceres-solver-2.1.0
 make -j8
+sudo make install
+```
+
+### Build Cpp files
+
+Remove the existing build folder if there is.
+
+```bash
+cd src/optimizer
+mkdir build && cd build
+cmake .. && make -j8
+cd ../../..
+
+cd helper_func/global_sfm
+mkdir build && cd build
+cmake .. && make -j8
+cd ../../..
 ```
 
 ### Installation of DepthAnything-v2
@@ -81,7 +99,7 @@ Please follow the official instructions: [XMem](https://github.com/hkchengrex/XM
 
 ## Data Preparation
 
-### Download public datasets
+### Download public datasets or Prepare your own dataset
 
 - YCBInEOAT
 
@@ -99,11 +117,13 @@ Prepare your RGB video folder as below:
 
 You will need to create a initial object mask to specify the region you want to track, as stated in the paper.
 
-Please run the monocular depth prdiction (Depth-Anything-v2) and mask prediction (XMem) beforehand and put them into the folder.
-**NOTE: Their files names should be the same as the corresponding RGB images.**
+Please run the monocular depth prdiction (Depth-Anything-v2) and mask prediction (XMem) beforehand, and put them into the result folder.
+
+- **NOTE 1:** Their files names should be the same as the corresponding RGB images.
+- **NOTE 2:** The sequence folder is set by specifying the [output folder](#path-to-sequence-folder) in the args.
 
 ```text
-[output_folder]
+[sequence_folder]
   ├──pred_depth/  (PNG files, stored in mm, in uint16.)
   └──pred_mask/   (PNG files, including the initial one. 0: background, 1: ROI)
 ```
@@ -121,18 +141,20 @@ python main_mp.py
 
 ## Others
 
+### Path to Sequence Folder
+
+**Sequence Folder:** [Your Output Folder]/[dataset_name]/[sequence_name]
+
 ### Results
 
-Output Folder: **[Your Folder]/[dataset_name]/[sequence_name]/result_files**
-
-- Preidcted Poses: **[Output Folder]/global_pose**
-- Projected Bounding Box with preidcted Poses: **[Output Folder]/global_pose_vis**
-- Predicted Scale Factors: **[Output Folder]/scale_shift** and **[Output Folder]/Dscale.npy**
-- Cache of the correspondences from the feature matcher: **[Output Folder]/corres_cache**
+- Preidcted Poses: **[Sequence Folder]/result_files/global_pose**
+- Projected Bounding Box with preidcted Poses: **[Sequence Folder]/result_files/global_pose_vis**
+- Predicted Scale Factors: **[ReSequencesult Folder]/result_files/scale_shift** and **[Result Folder]/result_files/Dscale.npy**
+- Cache of the correspondences from the feature matcher: **[Result Folder]/result_files/corres_cache**
 
 ### Logs
 
-Log Folder: **logs/[sequence_name]**
+**Log Folder:** logs/[sequence_name]
 
 - Plot of the changes of scale factors: **[Log Folder]/scale_factors.png**
 - Visualization during tracking: **[Log Folder]/opt_vis/**

@@ -31,23 +31,12 @@ class Frame:
     """
     pose is transformation from refObj to cam 
     """
-    def __init__(self, f_id, file_index):
+    def __init__(self, f_id, file_index, f_n):
         self.f_id = f_id                # id for frames in the frame manager
+        self.f_n = f_n
         self.file_index = file_index    # frame index in the video sequence
         self.local_pose = np.eye(4)
         self.global_pose = np.eye(4)    # cam_T_refObj
-        self.global_q = pyq.Quaternion(matrix = np.eye(3))
-        self.global_t = np.zeros(3).copy()
-
-        self.is_grid = False
-        self.is_keyframe = False
-        self.scaleAndShift = np.array([1.0, 0.0])
-
-    def __init__(self, f_id, file_index, rgb, mask, depth, f_n, gridSize=10):
-        self.f_id = f_id
-        self.file_index = file_index
-        self.local_pose = np.eye(4)
-        self.global_pose = np.eye(4)
         self.global_q = pyq.Quaternion(matrix = np.eye(3))
         self.global_t = np.zeros(3).copy()
 
@@ -57,31 +46,33 @@ class Frame:
         self.max_depth = 1.0
         # ****************
 
-        self.is_grid = True
         self.is_keyframe = False
         self.scaleAndShift = np.array([1.0, 0.0])
 
-        # init the grid
+        
+
+    def __init__(self, f_id, file_index, rgb, mask, depth, f_n):
+        self.f_id = f_id                # id for frames in the frame manager
+        self.f_n = f_n
+        self.file_index = file_index    # frame index in the video sequence
+        self.local_pose = np.eye(4)
+        self.global_pose = np.eye(4)    # cam_T_refObj
+        self.global_q = pyq.Quaternion(matrix = np.eye(3))
+        self.global_t = np.zeros(3).copy()
+
+        # ****************
+        self.sift_feature = np.zeros(8)
+        self.gt_rot = np.eye(3)
+        self.max_depth = 1.0
+        # ****************
+
+        self.is_keyframe = False
+        self.scaleAndShift = np.array([1.0, 0.0])
+
+        # pre-load
         self.rgb = rgb
         self.mask = mask
         self.depth = depth
-        self.f_n = f_n
-
-        mask_after_polling = max_pooling(mask, gridSize)
-        self.grid_size = gridSize
-        active_grid = np.where(mask_after_polling > 0)
-        self.gridScaleShift : dict = {}
-        for i in range(len(active_grid[0])):
-            v, u = active_grid[0][i], active_grid[1][i]
-            # NOTE!! mask's coordinate is (v, u), but the grid's coordinate is (u, v)
-            border = [
-                (u-1, v-1), (u, v-1), (u+1, v-1), 
-                (u-1, v), (u, v), (u+1, v),
-                (u-1, v+1), (u, v+1), (u+1, v+1)
-            ]
-            for b in border:
-                if b not in self.gridScaleShift.keys():
-                    self.gridScaleShift[b] = np.array([1.0, 0.0])
         
 
     
@@ -119,88 +110,9 @@ class Frame:
         """
         self.scaleAndShift = np.array([scale, shift])
 
-
-    def get_interpolated_scaleAndShift(self, u, v):
-        """get the interpolated scale and shift for the given pixel
-        """
-        x_grid = u // self.grid_size
-        y_grid = v // self.grid_size
-        x_res  = u % self.grid_size
-        y_res  = v % self.grid_size
-        # get the 4 corner grid
-        half_grid = self.grid_size // 2
-        if x_res < half_grid:
-            x0_grid = x_grid - 1
-            x1_grid = x_grid
-        else:
-            x0_grid = x_grid
-            x1_grid = x_grid + 1
-
-        if y_res < half_grid:
-            y0_grid = y_grid - 1
-            y1_grid = y_grid
-        else:
-            y0_grid = y_grid
-            y1_grid = y_grid + 1
-
-        grid00 = (x0_grid, y0_grid)
-        grid01 = (x0_grid, y1_grid)
-        grid10 = (x1_grid, y0_grid)
-        grid11 = (x1_grid, y1_grid)
-        
-        # get the 4 scale and shift
-        if (grid00 not in self.gridScaleShift.keys()
-            or grid01 not in self.gridScaleShift.keys()
-            or grid10 not in self.gridScaleShift.keys()
-            or grid11 not in self.gridScaleShift.keys()):
-            return 1.0, 0.0
-
-        scale00, shift00 = self.gridScaleShift[grid00]
-        scale01, shift01 = self.gridScaleShift[grid01]
-        scale10, shift10 = self.gridScaleShift[grid10]
-        scale11, shift11 = self.gridScaleShift[grid11]
-        # interpolate the scale and shift
-        u0 = x0_grid * self.grid_size
-        u1 = x1_grid * self.grid_size
-        v0 = y0_grid * self.grid_size
-        v1 = y1_grid * self.grid_size
-
-        scale_y0 = (u1 - u) / (u1 - u0) * scale00 + (u - u0) / (u1 - u0) * scale10
-        scale_y1 = (u1 - u) / (u1 - u0) * scale01 + (u - u0) / (u1 - u0) * scale11
-        scale    = (v1 - v) / (v1 - v0) * scale_y0 + (v - v0) / (v1 - v0) * scale_y1
-
-        shift_y0 = (u1 - u) / (u1 - u0) * shift00 + (u - u0) / (u1 - u0) * shift10
-        shift_y1 = (u1 - u) / (u1 - u0) * shift01 + (u - u0) / (u1 - u0) * shift11
-        shift    = (v1 - v) / (v1 - v0) * shift_y0 + (v - v0) / (v1 - v0) * shift_y1
-        
-        return scale, shift
-    
-
-    def get_scaleAndShift_map(self):
-        """get the scale and shift map for the frame's mono depth map
-        """
-        for k, v in self.gridScaleShift.items():
-            if math.fabs(v[0] - 1.0) > 0.2 or math.fabs(v[1]) > 0.2:
-                # print(f"grid: {k}, scale: {v[0]}, shift: {v[1]}")
-                pass
-        scale_map = np.zeros((self.mask.shape[0], self.mask.shape[1]))
-        shift_map = np.zeros((self.mask.shape[0], self.mask.shape[1]))
-        vs, us = np.where(self.mask > 0)
-        for u, v in zip(us, vs):
-            scale_map[v, u], shift_map[v, u] = self.get_interpolated_scaleAndShift(u, v)
-            # if fabs(scale_map[v, u] - 1.0) > 0.5 or fabs(shift_map[v, u]) > 0.5:
-            #     print(f"u: {u}, v: {v}, scale: {scale_map[v, u]}, shift: {shift_map[v, u]}")
-        return scale_map, shift_map
-
-
     def __str__(self) -> str:
         res = f"""=====Frame {self.file_index}=====
             is_keyframe: {self.is_keyframe} q: {self.global_q}\t t: {self.global_t}\n"""
-        if self.is_grid:
-            for k, v in self.gridScaleShift.items():
-                if math.fabs(v[0] - 1.0) > 0.04 or math.fabs(v[1]) > 0.04:
-                    res += f"grid: {k}, scale: {v[0]}, shift: {v[1]}\n"
-            res += "========================="
         
         return res
 
@@ -340,9 +252,7 @@ class KeyFrameManager:
         # 'BF' - bruct force
         # 'Near_Rot' - nearest g.t. rotation
         # 'Near_normal_orient' - 
-        # 'Near_cos_sift' cos-similarity between the sift feature
         kf_selection_method = 'Near_Rot'
-
 
         # bruct force
         if kf_selection_method == 'BF':
@@ -409,37 +319,15 @@ class KeyFrameManager:
                 if len(selected_frames_id) >= self.max_keyframes:
                     break
             print("From near normal-orient", selected_frames_id)
-        
-
-        # similariy: cosine | Chi-square | KL | Wasserstein
-        if kf_selection_method == 'Near_sift_feature':
-            # ======================= nearest sift feature =======================
-            selected_frames_id = [f_id]
-            cur_feature = self.frames[f_id].sift_feature
-            diff_feature = {}
-            for kf_id in range(f_id):
-                kf_feature = self.frames[kf_id].sift_feature
-                # Higher values indicate higher similarity.
-                diff_feature[kf_id] = compute_cos_similarity(cur_feature, kf_feature)
-                # Smaller values indicate higher similarity.
-                # diff_feature[kf_id] = compute_Chi_squared_distance(cur_feature, kf_feature)
-            # asending by default
-            diff_feature = dict(sorted(
-                diff_feature.items(), key=lambda item: item[1], reverse=True
-            ))
-            for kf_id in list(diff_feature.keys()):
-                selected_frames_id.append(kf_id)
-                if len(selected_frames_id) >= self.max_keyframes:
-                    break
-            print("From similar feature", selected_frames_id)
 
 
         selected_frames_id.sort()
         logging.info(f"[BA] Selected frames: {selected_frames_id}")
 
-        # ****************** test ******************
+        # *********** ablation study ************
         # for id in selected_frames_id:
         #     self.frames[id].set_scaleAndShift(1.0, 0.0)
+        # ***************************************
 
         # configs for Poselib PnP
         use_PnP_filter = True
@@ -467,51 +355,73 @@ class KeyFrameManager:
 
         draw_BA_before = False
 
-        kpts_pairs_dict = {}
-        image0_pairs = []
-        image1_pairs = []
-        mask0_pairs = []
-        mask1_pairs = []
-        depth0_pairs = []
-        depth1_pairs = []
-        b_i = 0
-
-        for i in range(len(selected_frames_id)):
-            for j in range(i+1, len(selected_frames_id)):
-                f_id0 = selected_frames_id[i]
-                f_id1 = selected_frames_id[j]
-                frame0 = self.frames[f_id0]
-                frame1 = self.frames[f_id1]
-
-                image0_pairs.append(frame0.rgb)
-                image1_pairs.append(frame1.rgb)
-                mask0_pairs.append(frame0.mask)
-                mask1_pairs.append(frame1.mask)
-                depth0_pairs.append(frame0.depth)
-                depth1_pairs.append(frame1.depth)
-
-                kpts_pairs_dict[(f_id0, f_id1)] = {
-                    "batch_id": b_i, 
-                    "corres_path": f"{out_dir_corres}/{frame0.f_n}_{frame1.f_n}.txt", 
-                }
-                b_i += 1
-
-        # run prediction and save the kpts into storage
-        kpts_pairs_dict = self.detector.match_features_batch(
-            kpts_pairs_dict, image0_pairs, image0_pairs, 
-            mask0_pairs, mask1_pairs, depth0_pairs, depth1_pairs
-        )
-
-
         # for visualization and debug
-        # feature_pairs_list = [] 
-        # feature_pairs_dict = {}
+        kpts_pairs_dict = {}
         for i in range(len(selected_frames_id)):
             for j in range(i+1, len(selected_frames_id)):
                 f_id0 = selected_frames_id[i]
                 f_id1 = selected_frames_id[j]
                 frame0:Frame = self.frames[f_id0]
                 frame1:Frame = self.frames[f_id1]
+                
+                # ============================= Get kpt matches from LoFTR =============================
+                corres_path = f"{out_dir_corres}/{frame0.f_n}_{frame1.f_n}.txt"
+                success_match, kpts0, kpts1 = self.detector.match_features(
+                    corres_path, frame0.rgb, frame1.rgb, frame0.mask, 
+                    frame1.mask, frame0.depth, frame1.depth
+                )
+                kpts_pairs_dict[(f_id0, f_id1)] = {
+                    "match_flag": success_match,
+                    "kpts0": kpts0, "kpts1": kpts1,
+                }
+                # logging.info(f"*********** Frame {f_id0}-{f_id1} (file {file_idx0}-{file_idx1}) ***********")
+                # logging.info(f"#valid kpts: {len(kpts0)}")
+
+        # ======================== Batch process the kpt matches ====================
+        # image0_pairs = []
+        # image1_pairs = []
+        # mask0_pairs = []
+        # mask1_pairs = []
+        # depth0_pairs = []
+        # depth1_pairs = []
+        # b_i = 0
+
+        # for i in range(len(selected_frames_id)):
+        #     for j in range(i+1, len(selected_frames_id)):
+        #         f_id0 = selected_frames_id[i]
+        #         f_id1 = selected_frames_id[j]
+        #         frame0 = self.frames[f_id0]
+        #         frame1 = self.frames[f_id1]
+
+        #         image0_pairs.append(frame0.rgb)
+        #         image1_pairs.append(frame1.rgb)
+        #         mask0_pairs.append(frame0.mask)
+        #         mask1_pairs.append(frame1.mask)
+        #         depth0_pairs.append(frame0.depth)
+        #         depth1_pairs.append(frame1.depth)
+
+        #         kpts_pairs_dict[(f_id0, f_id1)] = {
+        #             "batch_id": b_i, 
+        #             "corres_path": f"{out_dir_corres}/{frame0.f_n}_{frame1.f_n}.txt", 
+        #         }
+        #         b_i += 1
+
+        # # run prediction and save the kpts into storage
+        # kpts_pairs_dict = self.detector.match_features_batch(
+        #     kpts_pairs_dict, image0_pairs, image0_pairs, 
+        #     mask0_pairs, mask1_pairs, depth0_pairs, depth1_pairs
+        # )
+        # ========================================================================  
+
+
+        # for visualization and debug
+        for i in range(len(selected_frames_id)):
+            for j in range(i+1, len(selected_frames_id)):
+                f_id0 = selected_frames_id[i]
+                f_id1 = selected_frames_id[j]
+                frame0:Frame = self.frames[f_id0]
+                frame1:Frame = self.frames[f_id1]
+
 
                 pair_dict = kpts_pairs_dict[(f_id0, f_id1)]
                 success_match = pair_dict["match_flag"]
@@ -568,50 +478,6 @@ class KeyFrameManager:
 
                     ratio_inlier = (inlier_mask.sum() / kpts1.shape[0])
                     # logging.info(f"Ratio-inlier after robust pnp: {ratio_inlier:.2f}")
-
-                    """
-                    if draw_BA_before:
-                        # prepare data points
-                        P3d_0 = P3d_0[inlier_mask]
-                        P3d_1 = P3d_1[inlier_mask]
-                        P3d_0_to1 = P3d_0_to1[inlier_mask]
-                        kpts1_in = kpts1[inlier_mask]
-
-                        fig = plt.figure(figsize=(12, 6))
-                        fig.suptitle(f"{f_id0}-{f_id1}")
-
-                        err_3d = norm(P3d_0 - P3d_1, axis=-1).mean()
-                        err_disp = (1.0/P3d_0[:,2] - 1.0/P3d_1[:,2]).mean()
-                        ax = plt.subplot(121, projection='3d')
-                        ax.set_title(f'3d-error: {err_3d:.4f} \n d-error {err_disp:.4f}')
-                        ax.scatter(P3d_0[:, 0], P3d_0[:, 1], P3d_0[:, 2],
-                                    c='b', marker='x', label = '3d-0')
-                        ax.scatter(P3d_1[:, 0], P3d_1[:, 1], P3d_1[:, 2],
-                                    c='r', label = '3d-1')
-                        ax.scatter(P3d_0_to1[:, 0], P3d_0_to1[:, 1], P3d_0_to1[:, 2],
-                                    c='g', label = '3d-0to1')
-                        ax.set_aspect("equal")
-                        
-                        P3d_reproj_in1 = P3d_0_to1 @ K.T
-                        P3d_reproj_in1 = P3d_reproj_in1[:, :2] / P3d_reproj_in1[:, 2:3]
-                        err_2d = norm((kpts1_in - P3d_reproj_in1), axis=-1).mean()
-                        ax = plt.subplot(122)
-                        ax.set_title(f'2d-error: {err_2d:.6f}')
-                        ax.imshow(image1)
-                        ax.scatter(kpts1[:, 0], kpts1[:, 1], 
-                            c='r', label = '2d-1')
-                        ax.scatter(P3d_reproj_in1[:, 0], P3d_reproj_in1[:, 1], 
-                            c='g', label = '2d-0to1-proj')
-
-                        valid_x_range = (np.min(kpts1[:, 0]), np.max(kpts1[:, 0]))
-                        valid_y_range = (np.min(kpts1[:, 1]), np.max(kpts1[:, 1]))
-                        ax.set_xlim(valid_x_range)
-                        ax.set_ylim(valid_y_range)
-                        ax.invert_yaxis()
-                        plt.savefig(f"{BA_debug_dir}/{f_id0}-{f_id1}_pnp.png")
-                        plt.close()
-
-                    """
                     
                     if ratio_inlier < (thre_ratio_inlier):
                         continue
@@ -642,13 +508,7 @@ class KeyFrameManager:
                     frame1.global_q.elements, frame1.global_t, 
                     frame0.scaleAndShift, frame1.scaleAndShift
                     )
-                # BAsolver.addAnEdgeGridVersion(
-                #     fix_ab, (i==0), uvds0, uvds1, K, weights, 
-                #     frame0.global_q.elements, frame0.global_t, 
-                #     frame1.global_q.elements, frame1.global_t, 
-                #     frame0.gridScaleShift, frame1.gridScaleShift, 
-                #     frame0.grid_size)
-
+                
                 # logging.info(f">>>>> Connection between Frame {f_id0}-{f_id1} added!")
                 # _feature_pair = FeaturePair(f_id0, f_id1, uvds0, uvds1)
                 # feature_pairs_list.append(_feature_pair)
@@ -662,11 +522,6 @@ class KeyFrameManager:
         # logging.info("Before BA") # dense log
         # for id in selected_frames_idx:
         #     logging.info(f"Frame: {self.frames[id]}")
-
-        # plt.figure(0)
-        # nx.draw(G, with_labels=True, node_size= 500, font_size = 10, font_color='white')
-        # plt.savefig(f"{graph_dir}/G_frame-{f_id}.jpg")
-        # plt.close()
         
         # ======================== Optimization ========================
         frames_before = {id:deepcopy(self.frames[id]) for id in selected_frames_id}
@@ -1040,110 +895,3 @@ class KeyFrameManager:
             if quit == 'q':
                 exit()
         
-
-   
-    def visualize_gird_scale_shift(self):
-
-        # from input get opt_id, frame_id0, frame_id1
-        print("select an optimization log from the following list:")
-        for i, opt_log in enumerate(self.optimization_log):
-            print(f"Optimization log {i}")
-            print(f"selected frames: {opt_log.selected_frames_idx}")
-        opt_id = int(input("Enter the optimization log id: "))
-        assert opt_id < len(self.optimization_log)
-        opt_log : OptimizationLog = self.optimization_log[opt_id]
-
-
-        feature_pairs_dict = opt_log.feature_pairs_dict
-        frames_before = opt_log.frames_before
-        frames_after = opt_log.frames_after
-        # list the frames
-        print("select a frame from the following list:")
-        for i, frame in frames_before.items():
-            print(f"Frame {i}")
-
-        K = self.data_reader.K
-
-        while True:
-            frame_id = int(input("Enter the frame id: "))
-            frame_old:Frame = frames_before[frame_id]
-            frame_new:Frame = frames_after[frame_id]
-            frame_index = frame_old.file_index
-
-            # get the mono depth map
-            depth_map = self.data_reader.get_depth(frame_index)
-            scale_map_old, shift_map_old = frame_old.get_scaleAndShift_map()
-            scale_map_new, shift_map_new = frame_new.get_scaleAndShift_map()
-            # apply the scale and shift to the depth map
-            depth_map_old = scale_map_old * depth_map + shift_map_old
-            depth_map_new = scale_map_new * depth_map + shift_map_new
-            # get 3d points
-            _viz_grid_size = 5
-            v, u = np.where(frame_old.mask > 0)
-            # make v, u sparse
-            v = v[::_viz_grid_size**2]
-            u = u[::_viz_grid_size**2]
-            p3d_old = np.hstack([u, v, depth_map_old[v, u]])
-            p3d_new = np.hstack([u, v, depth_map_new[v, u]])
-            p3d_old = p3d_old @ inv(K).T
-            p3d_new = p3d_new @ inv(K).T
-
-            # get gt 3d points
-            depth_gt = self.data_reader.get_gt_depth(frame_index)
-            p3d_gt = np.hstack([u, v, depth_gt[v, u]])
-            p3d_gt = p3d_gt @ inv(K).T
-
-            # filter out the points with depth == 0
-            p3d_old   = p3d_old[np.where(p3d_old[:, 2] > 0)]
-            p3d_new   = p3d_new[np.where(p3d_new[:, 2] > 0)]
-            p3d_gt    = p3d_gt[np.where(p3d_gt[:, 2] > 0)]
-
-            # visualize the depth map in 2d and 3d
-            fig = plt.figure(0, figsize = (10, 10))
-            fig.clf()
-            _dmin = min(np.min(depth_map_old), np.min(depth_map_new))
-            _dmax = max(np.max(depth_map_old), np.max(depth_map_new))
-            ax = plt.subplot(221)
-            ax.set_title("Depth map old")
-            plt.colorbar(ax.imshow(depth_map_old, cmap = 'jet', vmin=_dmin, vmax=_dmax), ax = ax)
-            ax = plt.subplot(222)
-            ax.set_title("Depth map new")
-            plt.colorbar(ax.imshow(depth_map_new, cmap = 'jet', vmin=_dmin, vmax=_dmax), ax = ax)
-            ## 3d in one figure
-            ax = plt.subplot(212, projection='3d', )
-            ax.set_aspect("equal")
-            MARK_SIZE = 10
-            ax.set_aspect("equal")
-            sc_old = ax.scatter(p3d_old[:, 0], p3d_old[:, 1], p3d_old[:, 2], 
-                                c = 'r', label = 'old', s = MARK_SIZE)
-            sc_new = ax.scatter(p3d_new[:, 0], p3d_new[:, 1], p3d_new[:, 2], 
-                                c = 'g', label = 'new', s = MARK_SIZE)
-            sc_gt  = ax.scatter(p3d_gt[:, 0], p3d_gt[:, 1], p3d_gt[:, 2], 
-                                c = 'b', label = 'gt' , s = MARK_SIZE)
-            def toggle(e,sc):
-                if sc.get_visible():
-                    sc.set_visible(False)
-                else:
-                    sc.set_visible(True)
-                plt.draw()
-            sc_btn_old = plt.axes([0.7, 0.1, 0.1, 0.05])
-            sc_btn_new = plt.axes([0.8, 0.1, 0.1, 0.05])
-            sc_btn_gt  = plt.axes([0.9, 0.1, 0.1, 0.05])
-            btn_old    = plt.Button(sc_btn_old, 'old')
-            btn_new    = plt.Button(sc_btn_new, 'new')
-            btn_gt     = plt.Button(sc_btn_gt, 'gt')
-            btn_old.on_clicked(lambda e: toggle(e, sc_old))
-            btn_new.on_clicked(lambda e: toggle(e, sc_new))
-            btn_gt.on_clicked(lambda e: toggle(e, sc_gt))
-            # show the legend
-            ax.legend()
-            # show the rgb image
-            plt.figure(1)
-            plt.imshow(self.data_reader.get_color(frame_index))
-            plt.title("RGB image")
-            plt.show()
-            if input("press q to quit") == 'q':
-                break
-
-
-    

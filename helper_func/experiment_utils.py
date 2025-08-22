@@ -73,17 +73,12 @@ def show_cam_poses_dfs(poses_out_dir):
         rr.log(f"camera/{idx}", rr.Pinhole(
             resolution=[640 ,480], image_from_camera=K, 
             camera_xyz=rr.ViewCoordinates.RDF))
-        
-""" For Detector-free SfM results
-python ~/Disk_sda6/colmap/scripts/python/read_write_model.py \
---input_model ~/Disk_sda6/DetectorFreeSfM/SfM_dataset/ho3d/MPM10/DetectorFreeSfM_loftr_official_coarse_only__scratch_no_intrin/colmap_refined --input_format .bin \
---output_model ~/Disk_sda6/DetectorFreeSfM/SfM_dataset/ho3d/MPM10 --output_format .txt
-"""
+
 
 """ For COLMAP
-python ~/Disk_sda6/colmap/scripts/python/read_write_model.py \
---input_model ~/Disk_sda6/DetectorFreeSfM/colmap_result/chairwood_lift/sparse/0 --input_format .bin \
---output_model ~/Disk_sda6/DetectorFreeSfM/colmap_result/chairwood_lift --output_format .txt
+python ~/colmap/scripts/python/read_write_model.py \
+--input_model colmap_result/chairwood_lift/sparse/0 --input_format .bin \
+--output_model colmap_result/chairwood_lift --output_format .txt
 """
 
 def convert_colmap_poses(file_dir):
@@ -144,7 +139,7 @@ def convert_colmap_poses(file_dir):
 
 if __name__ == "__main__":
 
-    poses_out_dir = '/home/zilong/Disk_sda6/DetectorFreeSfM/colmap_result/tablesquare_lift'
+    poses_out_dir = 'colmap_result/tablesquare_lift'
     convert_colmap_poses(poses_out_dir)
     # show_cam_poses_dfs(poses_out_dir)
     

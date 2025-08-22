@@ -188,8 +188,8 @@ def get_relative_rot(reader, ref_poses, raw_pred_poses):
     auc_2deg = compute_auc(rela_rot_errors, max_val=2.0)
     auc_5deg = compute_auc(rela_rot_errors, max_val=5.0)
 
-    print(f"R_err(deg) - avg | median: {avg_rot:.4f} {median_rot:.4f}")
-    print(f"R_err_AUC - 1 | 2 | 5: {auc_1deg:.4f} {auc_2deg:.4f} {auc_5deg:.4f}")
+    print(f"R_err_avg | R_err_median | R_err_AUC - 1/2/5(deg)")
+    print(f"{avg_rot:.4f}\t{median_rot:.4f}\t{auc_1deg:.4f}\t{auc_2deg:.4f}\t{auc_5deg:.4f}")
 
     # fig = plt.figure(figsize=(8, 8))
     # # errors on relative rotation
@@ -222,8 +222,9 @@ def compute_metric(reader, ref_poses, aligned_pred_poses):
     add_errs = []
 
     thres_ADD = 0.3 # 10cm
-    if isinstance(reader, BEHAVEReader):
-        thres_ADD = 0.3 # 30cm
+    # if isinstance(reader, BEHAVEReader):
+    #     thres_ADD = 0.3 # 30cm
+    thres_ADD2 = 0.1 # 10cm
 
     
     model_pts = reader.mesh.vertices.copy()
@@ -269,7 +270,6 @@ def compute_metric(reader, ref_poses, aligned_pred_poses):
     avg_rot_err = np.mean(rotate_errs)
 
     # fig = plt.figure(figsize=(8, 5))
-    
     # ax = fig.add_subplot(221)
     # ref_pts = ref_poses[:, :3, 3]
     # pred_trans_pts = aligned_pred_poses[:, :3, 3]
@@ -294,7 +294,6 @@ def compute_metric(reader, ref_poses, aligned_pred_poses):
     # plt.close()
 
 
-
     # fig = plt.figure(figsize=(8, 8))
     # # errors on absolute rotation
     # ax = plt.subplot2grid((2, 2), (0, 0), colspan=2)
@@ -313,163 +312,31 @@ def compute_metric(reader, ref_poses, aligned_pred_poses):
     # plt.close()
 
     print("***************************************")
-
-    print(f"t_err(cm) | R_err(deg): {np.mean(translate_errs):.4f} {avg_rot_err:.4f}")
+    print(f"t_err(cm) | Acc 10/5/2(cm) | AUC 10/5/2(cm) | ADD-S/ADD @{thres_ADD}(m) | ADD-S/ADD @{thres_ADD2}(m) | R_err(deg)")
 
     recall_2cm = cnt_below_2cm / (idx+1)
     recall_5cm = cnt_below_5cm / (idx+1)
     recall_10cm = cnt_below_10cm / (idx+1)
-    print(f"Acc 10 | 5 | 2 (cm): {recall_10cm:.2f} {recall_5cm:.2f} {recall_2cm:.2f}")
-    recall_5cm10deg = cnt_below_5cm10deg / (idx+1)
-    # print(f"Acc 5cm10deg: {recall_5cm10deg:.2f}")
+    # recall_5cm10deg = cnt_below_5cm10deg / (idx+1)
 
     AUC_2cm = compute_auc(copy.deepcopy(translate_errs), 2.0)
     AUC_5cm = compute_auc(copy.deepcopy(translate_errs), 5.0)
     AUC_10cm = compute_auc(copy.deepcopy(translate_errs), 10.0)
-    print(f"AUC 10 | 5 | 2 (cm): {AUC_10cm:.2f} {AUC_5cm:.2f} {AUC_2cm:.2f}")
 
     AUC_ADD = compute_auc(copy.deepcopy(add_errs), thres_ADD)
     AUC_ADDS = compute_auc(copy.deepcopy(adi_errs), thres_ADD)
-    print(f"ADD-S | ADD (thres-{thres_ADD}): {AUC_ADDS:.2f} {AUC_ADD:.2f}")
 
-    thres_ADD = 0.1
-    AUC_ADD_new = compute_auc(copy.deepcopy(add_errs), thres_ADD)
-    AUC_ADDS_new = compute_auc(copy.deepcopy(adi_errs), thres_ADD)
-    print(f"ADD-S | ADD (thres-{thres_ADD}): {AUC_ADDS_new:.2f} {AUC_ADD_new:.2f}")
+    AUC_ADD_new = compute_auc(copy.deepcopy(add_errs), thres_ADD2)
+    AUC_ADDS_new = compute_auc(copy.deepcopy(adi_errs), thres_ADD2)
+
+    print(f"{np.mean(translate_errs):.2f}\t{recall_10cm:.2f}\t{recall_5cm:.2f}\t{recall_2cm:.2f}\t{AUC_10cm:.2f}\t{AUC_5cm:.2f}\t{AUC_2cm:.2f}\t{AUC_ADDS:.2f}\t{AUC_ADD:.2f}\t{AUC_ADDS_new:.2f}\t{AUC_ADD_new:.2f}\t{avg_rot_err:.2f}")
 
     print("***************************************")
-
-
-def compute_metric_evo(file_dir, traj_ref, traj_est, use_gtD):
-    from evo.tools import plot
-    from evo.core import metrics
-    from evo.core.units import Unit
-
-    # make data package
-    traj_compared = (traj_ref, traj_est)
-    metric_list = ['translation', 'rotation_deg', 'full']
-    for select_metric in metric_list:
-        print(f"[evo] Evaluating {select_metric}")
-        # calculate the APE and RPE and ge t statistics
-        if select_metric == 'translation':
-            pose_relation = metrics.PoseRelation.translation_part
-        elif select_metric == 'rotation_deg':
-            pose_relation = metrics.PoseRelation.rotation_angle_deg
-        else:
-            pose_relation = metrics.PoseRelation.full_transformation
-
-        ape_metric = metrics.APE(pose_relation)
-        ape_metric.process_data(traj_compared)
-        ape_stat = ape_metric.get_statistic(metrics.StatisticsType.rmse)
-        ape_stats = ape_metric.get_all_statistics()
-        
-
-        # if you have 30 poses per second and want to measure the RPE every second, use delta=30
-        delta = 1
-        delta_unit = Unit.frames
-        #  use all pairs of a certain delta value, i.e. not only the subsequent (linear) delta pairs of the trajectory.
-        rpe_metric = metrics.RPE(pose_relation, delta=delta, delta_unit=delta_unit, all_pairs=True)
-        rpe_metric.process_data(traj_compared)
-        rpe_stat = rpe_metric.get_statistic(metrics.StatisticsType.rmse)
-        rpe_stats = rpe_metric.get_all_statistics()
-        print(f"APE: {ape_stat:.4f},\t RPE: {rpe_stat:.4f}")
-
-
-        fig = plt.figure(figsize=(10, 5))
-        plot_mode = plot.PlotMode.xyz
-
-        # ax = plot.prepare_axis(fig, plot_mode, subplot_arg=221)
-        # plot.traj(ax, plot_mode, traj_ref, '--', "gray", "reference")
-        # plot.traj(ax, plot_mode, traj_est, '-', 'blue')
-        # fig.axes.append(ax)
-        # plt.title('predicted trajectory of the object')
-
-        ax = plot.prepare_axis(fig, plot_mode, subplot_arg=121)
-        plot.traj(ax, plot_mode, traj_ref, '--', "gray", "reference")
-        plot.traj_colormap(ax, traj_est, ape_metric.error, 
-            plot_mode, min_map=ape_stats["min"], max_map=ape_stats["max"])
-        fig.axes.append(ax)
-        plt.title('$\mathrm{Sim}(3)$ alignment (APE)')
-
-        ax = plot.prepare_axis(fig, plot_mode, subplot_arg=122)
-        plot.traj(ax, plot_mode, traj_ref, '--', "gray", "reference")
-        plot.traj_colormap(ax, traj_est, rpe_metric.error, 
-            plot_mode, min_map=rpe_stats["min"], max_map=rpe_stats["max"])
-        fig.axes.append(ax)
-        plt.title('$\mathrm{Sim}(3)$ alignment (RPE)')
-
-        ax.legend()
-        fig.tight_layout()
-
-        vis_name = f"{file_dir}/evo_align_{select_metric}"
-        if use_gtD:
-            vis_name = vis_name+'_gtD'
-        plt.savefig(vis_name+'.png')
-
-
-
-
 
 
 
 
 # =========================== Alignment functions ===========================
-
-def compute_rot_align_error(params, ref_poses, tar_poses):
-    # scale = params[0]
-    # quat = params[1:4]
-    # trans_vec = params[4:]
-    rot_vec = params[:]
-
-    # rot_mat = R.from_rotvec(quat).as_matrix()
-    # sim3_tran = np.eye(4)
-    # sim3_tran[:3, :3] = (scale * np.eye(3)) @ rot_mat
-    # sim3_tran[:3, 3] = trans_vec
-    sim3_tran = np.eye(4)
-    sim3_tran[:3, :3] = rot_vec
-
-    trans_poses = np.matmul(sim3_tran[None], tar_poses)
-    trans_rots = np.transpose(trans_poses[:, :3, :3], (0, 2, 1))
-
-    rot_errors = np.arccos((np.trace(np.matmul(trans_rots, ref_poses[:, :3, :3]) - 1.0) / 2.0))
-    rot_errors = cauchy_loss(rot_errors, 0.5)
-
-    return np.mean(rot_errors)
-
-
-def align_minimizer(ref_poses, pred_poses):
-    """Return:
-        - aligned posed trajectory
-    """
-    ref_poses = np.array(ref_poses)
-    pred_poses = np.array(pred_poses)
-
-    # initial_params = np.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-    initial_params =  np.array([0.0, 0.0, 0.0])
-    result = minimize(
-        compute_rot_align_error,
-        initial_params,
-        args=(ref_poses, pred_poses),
-        method='L-BFGS-B',
-        # bounds=[(0.05, 5.0), (0.0, 1.0), (0.0, 1.0), (0.0, 1.0), (0.0, 1.0)]
-    )
-    # opt_scale = result.x[0]
-    # opt_quat = result.x[1:4]
-    # opt_translate = result.x[4:]
-    # opt_rot_mat = R.from_rotvec(opt_quat).as_matrix()
-    # sim3_tran = np.eye(4)
-    # sim3_tran[:3, :3] = (opt_scale * np.eye(3)) @ opt_rot_mat
-    # sim3_tran[:3, 3] = opt_translate
-
-    opt_rot_vec = result.x[:]
-    opt_rot_mat = R.from_rotvec(opt_rot_vec).as_matrix()
-
-    sim3_tran = np.eye(4)
-    sim3_tran[:3, :3] = opt_rot_mat
-    trans_poses = np.matmul(sim3_tran[None], pred_poses)
-    
-    return trans_poses
-
 
 def align_pycolmap_pos(ref_poses, pred_poses):
     # Cam_T_refObj -- w2c
@@ -781,21 +648,9 @@ def align_and_eval(file_dir, exp_name, use_gtD, reader:BaseReader):
     pred_traj_path = f"{file_dir}/pred_traj_{exp_name}.txt"
     if use_gtD:
         pred_traj_path = f"{file_dir}/pred_traj_{exp_name}.txt"
-    pred_traj_path = f"{file_dir}/Raydiffusion.txt" # it's w2c
-    # pred_traj_path = f"{file_dir}/MonoGS_.txt" # it's c2w
-    # pred_traj_path = f"{file_dir}/ACE0.txt" # it's w2c
+
     traj_est = file_interface.read_kitti_poses_file(pred_traj_path)
     tar_poses = copy.deepcopy(traj_est.poses_se3)
-
-
-    # c2w_poses = np.loadtxt(f"{file_dir}/dfs_c2w.txt").reshape(-1, 4, 4)
-    # # c2w_poses = np.loadtxt(f"{file_dir}/colmap_c2w.txt").reshape(-1, 4, 4)
-    # tar_poses = []
-    # for idx in range(len(c2w_poses)):
-    #     w2c = inv(c2w_poses[idx])
-    #     tar_poses.append(w2c)
-
-    # tar_poses = np.array(tar_poses)
 
     # ==============================================================
     # vis_cams_traj(ref_poses, tar_poses, seq_name+'_bevor')
@@ -818,21 +673,12 @@ def align_and_eval(file_dir, exp_name, use_gtD, reader:BaseReader):
         # aligned_res = align_pycolmap_pos(ref_poses, tar_poses)
         # aligned_res, rot_trans = align_globalsfm_rot(ref_poses, aligned_res)
 
-        # ============= directly align by the evo =============
-        # traj_est.align(traj_ref, correct_only_scale=(not use_gtD))
-        # aligned_res = traj_est.poses_se3
-
-        # =============== aligned by minimizer ===============
-        # aligned_est_poses = align_trajs_rot_scale(file_dir, ref_poses, aligned_est_poses)
-        # traj_est_align_s.set_pose_se3(aligned_est_poses)
-
-        # =======================================================
 
         # vis_cams_traj(ref_poses, aligned_res, seq_name+'_after')
 
         # vis_obj_poses(reader, ref_poses, tar_poses, seq_name+'_bevor')
 
-        Show_Align = True
+        Show_Align = False
         # ************ Show the aligned trajectories ***********
         if Show_Align:
             ref_pts = ref_poses[:, :3, 3]
@@ -852,7 +698,6 @@ def align_and_eval(file_dir, exp_name, use_gtD, reader:BaseReader):
         print("After alignment")
         compute_metric(reader, ref_poses, aligned_res)
 
-        # compute_metric_evo(file_dir, traj_ref, traj_est_align_s, use_gtD)
         
         draw_pose_dir = f'{file_dir}/aligned_pose_vis'
         draw_poses_align(reader, ref_poses, aligned_res, draw_pose_dir)
@@ -1060,45 +905,3 @@ if __name__ == "__main__":
     # for k, v in behave_list.items():
     #     main(dataset, k, v[0], v[1], USE_gtD, exp_name)
     
-
-
-    # NOTE To average across the whole dataset
-
-    # avg_rot = np.mean(rotate_errs)
-    # bins = range(0, 181, 10)
-
-    # fig = plt.figure(figsize=(8, 8))
-    # # errors on absolute rotation
-    # ax = plt.subplot2grid((2, 2), (0, 0), colspan=2)
-    # ax.plot(rotate_errs)
-    # ax.axhline(avg_rot, color='red', label=f'Avg: {avg_rot:.2f}')
-    # ax.set_title(f"{dataset} - Absolute Rotation Errors (after alignment)")
-    # ax.legend()
-    # # histogram
-    # ax = plt.subplot2grid((2, 2), (1, 0), colspan=2)
-    # ax.hist(rotate_errs, bins=bins, edgecolor='black')
-    # ax.set_xticks(bins, labels=[f'{int(x)}' for x in bins])
-    # ax.axvline(avg_rot, color='red')
-
-    # plt.savefig(f'rot_err_plot/{dataset}_abs_rot_err.png')
-
-
-    # avg_rot = np.mean(rela_rot_errors)
-    # median_rot = np.median(rela_rot_errors)
-
-    # fig = plt.figure(figsize=(6, 3))
-    # # histogram
-    # bins = list(range(0, 21, 2)) + [180]
-    # counts, edges = np.histogram(rela_rot_errors, bins=bins)
-    # bin_widths = np.diff(edges)
-    # bin_widths[-1] = bin_widths[-2]
-    # plt.bar(edges[:-1], counts, width=bin_widths, align='edge', edgecolor='black')
-
-    # # plt.hist(rela_rot_errors, bins=bins, edgecolor='black', align='left')
-    # plt.xticks(list(range(0, 23, 2)), labels=[f'{int(x)}\u00B0' for x in range(0, 21, 2)] + ['20\u00B0+']) # 
-    # plt.axvline(avg_rot, color='red', linewidth=2, label=f'Avg: {avg_rot:.2f}\u00B0')
-    # plt.axvline(median_rot, color='yellow', linewidth=2, label=f'Median: {median_rot:.2f}\u00B0')
-    # # plt.title(f"YCBInEOAT - Relative Rotation Errors (w/o alignment)")
-    # plt.legend()
-
-    # plt.savefig(f'rot_err_plot/MonoTracker_{dataset}_rela_rot_hist.png')
