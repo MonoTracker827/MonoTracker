@@ -127,7 +127,7 @@ def main(args):
         # re-create folders
         if not os.path.exists(out_dir_corres):
             os.system(f'mkdir -p {out_dir_corres}')
-            os.system(f"chmod -R 777 {out_dir}")
+            # os.system(f"chmod -R 777 {out_dir}")
         os.system(f'rm -rf {out_dir_pose_global} && mkdir -p {out_dir_pose_global}')
         os.system(f'rm -rf {out_dir_scale} && mkdir -p {out_dir_scale}')
 
@@ -260,9 +260,9 @@ def main(args):
         # get metrics - AUC, R & t err, AUC
         compute_metric(reader, ref_poses, aligned_est_poses)
 
-    # reset the access
-    os.system(f"chmod -R 777 {out_dir}")
-    os.system(f"chmod -R 777 {log_dir_seq}")
+    # # reset the access
+    # os.system(f"chmod -R 777 {out_dir}")
+    # os.system(f"chmod -R 777 {log_dir_seq}")
     print("\n\n")
 
 # 
@@ -298,7 +298,7 @@ if __name__ == "__main__":
         parser.add_argument('--out_base_dir', type=str, 
             default="/home/zilong/tmp/behave/date02")
         parser.add_argument('--use_gtD', action='store_true', default=False)
-        parser.add_argument('--exp_name', type=str, default="ablation_wo_disp")
+        parser.add_argument('--exp_name', type=str, default="robust_test")
         
         parser.add_argument('--seq_name', type=str, default="mustard0")
         parser.add_argument('--start_frame', type=int, default=0)

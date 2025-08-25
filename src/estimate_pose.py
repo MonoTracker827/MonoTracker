@@ -34,13 +34,13 @@ def run_loftr_then_PnP(
     # BA_step = cfgs['BA']['BA_step']
 
     # verbose = cfgs['verbose']
-    verbose = False
+    verbose = 0
     start_time = time.time()
     
     # read the images
     if len(keyframe_manager.frames) == 0:
         file_idx0 = reader.map_iter_to_index(f_iter_prev)
-        image0, mask0, depth0, normal0, f_name0 = reader.get_frame_pkg(file_idx0, use_gtD)
+        image0, mask0, depth0, _, f_name0 = reader.get_frame_pkg(file_idx0, use_gtD)
     else:
         f_id0 = len(keyframe_manager.frames)-1 
         # prev frame is the last frame in list
@@ -53,7 +53,7 @@ def run_loftr_then_PnP(
         
 
     file_idx1 = reader.map_iter_to_index(f_iter)
-    image1, mask1, depth1, normal1, f_name1 = reader.get_frame_pkg(file_idx1, use_gtD)
+    image1, mask1, depth1, _, f_name1 = reader.get_frame_pkg(file_idx1, use_gtD)
 
     K = reader.K
     # norm_factor_2d = np.array([K[0][2], K[1][2]])[None]
@@ -72,27 +72,7 @@ def run_loftr_then_PnP(
         logging.warning(f"(Skip) Not enough matched features ({kpts0.shape[0]}) with frame {file_idx0}!")
         return True, 0.0
     
-        # if (f_iter - f_iter_prev) == 1:
-        #     logging.warning(f"(Skip) Not enough matched features with frame {file_idx0}!")
-        #     return True
-
-        # ## NOTE try to match with second closest frame
-        # if len(keyframe_manager.frames) < 2:
-        #     return True
-        
-        # file_idx0 = keyframe_manager.frames[-2].file_index
-        # image0, mask0, depth0, normal0, f_name0 = reader.get_frame_pkg(file_idx0, use_gtD)
-        # logging.info(f"[Iter {f_iter-1}] Try to process pair {file_idx0}->{file_idx1} ({f_name0}->{f_name1})")
-
-        # corres_path = f"{out_dir_corres}/{f_name0}_{f_name1}.txt"
-        # success_match, kpts0, kpts1 = matcher.match_features(
-        #     corres_path, image0, image1, mask0, mask1, depth0, depth1)
-        
-        # if not success_match or kpts0.shape[0] < min_matches:
-        #     logging.warning("(Skip) Not enough matched features even with last frame!")
-        #     return True
-    
-    if verbose:
+    if verbose > 1:
         logging.info(f"{len(kpts0)} valid kpts left after filtering.")
     
     # create the first frame
@@ -107,15 +87,6 @@ def run_loftr_then_PnP(
         else:
             _frame_0.set_local_pose(np.eye(4))
             _frame_0.set_global_pose(np.eye(4))
-
-        # ****************
-        # valid_depth0 = depth0[mask0]
-        # thres_high0 = np.percentile(depth0[mask0], 95)
-        # use mean + 3 sigma
-        # thres_high0 = valid_depth0.mean() + 3.0* valid_depth0.std()
-        # _frame_0.max_depth = thres_high0
-        # logging.info(f"[Frame {f_id0}] - max_depth = {thres_high0:.2f}")
-        # ****************
         
         keyframe_manager.frames.append(_frame_0)
         keyframe_manager.check_and_add_keyframe(f_id=f_id0)
@@ -153,7 +124,7 @@ def run_loftr_then_PnP(
     # set initial scale ad shift
     a0_origin, b0_origin = _frame_0.scaleAndShift
     a0, b0 = a0_origin, b0_origin # frame0's from past
-    # a1, b1 = a1_static, b1_static # frame1's estimated from static bg
+    # a1, b1 = a1_static, b1_static # frame1
     a1, b1 = a0, b0
 
     # ================= Obtain kpts from Loftr and P3ds from Mono-D =================
@@ -166,7 +137,8 @@ def run_loftr_then_PnP(
     # logging.info('Calculating Depth boundaries')
     thres_d0 = np.mean(depth0_obj) + 3.0* np.std(depth0_obj)
     thres_d1 = np.mean(depth1_obj) + 3.0* np.std(depth1_obj)
-    logging.info(f"D-bds -- thres-d0: {thres_d0:.4f}, thres-d1: {thres_d1:.4f}")
+    if verbose > 1:
+        logging.info(f"D-bds -- thres-d0: {thres_d0:.4f}, thres-d1: {thres_d1:.4f}")
 
     # drop kpts with noisy depth value
     depth_mask = np.logical_and(
@@ -181,7 +153,7 @@ def run_loftr_then_PnP(
     # ========================== initial guess ==========================
     # pose here means the transformation from the refObj model to the camera
     T_0to1 = np.eye(4)
-    use_PnP = False
+    use_PnP = True
     filter_large_depth_diff = False
     # if the gap between the current frame and the prev frame is large
     # use_PnP = (use_PnP and (f_iter - f_iter_prev) > 3)
@@ -230,7 +202,8 @@ def run_loftr_then_PnP(
         T_0to1 = T_0to1_pnp
 
         ratio_inlier = np.sum(pnp_inliers) / len(kpts0)
-        logging.info(f"PnP inlier ratio: {ratio_inlier:.2f}\n")
+        if verbose > 1:
+            logging.info(f"PnP inlier ratio: {ratio_inlier:.2f}\n")
 
     if use_PnP and P3d_0.shape[0] < 0.5*min_matches:
         logging.warning(f"(Skip) Not enough pts after PnP ({P3d_0.shape[0]})!")
@@ -255,10 +228,6 @@ def run_loftr_then_PnP(
     # a1, b1 = 1.0, 0.0
     _frame_1.set_scaleAndShift(a1, b1)
 
-    # ****************
-    # _frame_1.max_depth = thres_high1
-    # logging.info(f"[Frame {f_id1}] - max_depth = {thres_high1:.2f}")
-    # ****************
 
     keyframe_manager.frames.append(_frame_1)
 
@@ -289,8 +258,10 @@ def run_loftr_then_PnP(
     # weights = np.array([5.0, 80.0, 20.0]) # YCB, HO3D
     weights = np.array([5.0, 100.0, 25.0]) # BEHAVE
     # *********** ablation study ************
-    # remove disparity loss
-    weights[2] = 0.0
+    # remove some losses
+    # weights[0] = 0.0
+    # weights[1] = 0.0
+    # weights[2] = 0.0
     # ***************************************
     loss_thres = np.array([1.0, 2.0, 1.0])
 
@@ -301,15 +272,16 @@ def run_loftr_then_PnP(
     # loss_thres = np.array([1.0, 2.0, 1.0])
     # ***************************************
 
-    logging.info(">>>>>>>>>> before optimization <<<<<<<<<<")
-    # logging.info(f"Pose0 - q_0:{_frame_0.global_q}\t t_0:{_frame_0.global_t.T}")
-    # logging.info(f"Pose1 - q_1:{_frame_1.global_q}\t t_1:{_frame_1.global_t.T}")
-    logging.info(f"Scales - 0: {_frame_0.scaleAndShift} | 1: {_frame_1.scaleAndShift}")
-    
-    # logging.info("Errors before neighbor optimization")
-    # keyframe_manager.eval_errors(f_id0, f_id1, uvds0, uvds1, weights)
-    # keyframe_manager.visualize_debug(f_id0, f_id1, uvds0, uvds1, 
-    #     f"iter{f_id0}_before_BA", f"{LOG_DIR}/{seq_name}/BA_corres")
+    if verbose > 1:
+        logging.info(">>>>>>>>>> before optimization <<<<<<<<<<")
+        logging.info(f"Pose0 - q_0:{_frame_0.global_q}\t t_0:{_frame_0.global_t.T}")
+        logging.info(f"Pose1 - q_1:{_frame_1.global_q}\t t_1:{_frame_1.global_t.T}")
+        logging.info(f"Scales - 0: {_frame_0.scaleAndShift} | 1: {_frame_1.scaleAndShift}")
+    if verbose > 2:
+        logging.info("Errors before neighbor optimization")
+        keyframe_manager.eval_errors(f_id0, f_id1, uvds0, uvds1, weights)
+        keyframe_manager.visualize_debug(f_id0, f_id1, uvds0, uvds1, 
+            f"iter{f_id0}_before_BA", f"{LOG_DIR}/{reader.seq_name}/BA_corres")
 
 
     BAsolver = pyPnPMutualRefine.BAsolver()
@@ -329,7 +301,8 @@ def run_loftr_then_PnP(
         _frame_0.scaleAndShift, _frame_1.scaleAndShift
         )
 
-    logging.info(f"=====> Start neighbor frames optimization <=====")
+    if verbose > 0:
+        logging.info(f"=====> Start neighbor frames optimization <=====")
     BAsolver.solve(MAX_ITER_BA)
 
     # update the global pose matrix
@@ -341,49 +314,47 @@ def run_loftr_then_PnP(
 
     BAsolver.reset()
 
-    logging.info(">>>>>>>>>> after 2-frame optimization <<<<<<<<<<")
-    # logging.info(f"Pose0 - q_0:{_frame_0.global_q}\t t_0:{_frame_0.global_t.T}")
-    # logging.info(f"Pose1 - q_1:{_frame_1.global_q}\t t_1:{_frame_1.global_t.T}")
-    logging.info(f"Scales - 0: {_frame_0.scaleAndShift} | 1: {_frame_1.scaleAndShift}")
-    
-    # logging.info("Errors after neighbor optimization")
-    # keyframe_manager.eval_errors(f_id0, f_id1, uvds0, uvds1, weights)
+    if verbose > 1:
+        logging.info(">>>>>>>>>> after 2-frame optimization <<<<<<<<<<")
+        logging.info(f"Pose0 - q_0:{_frame_0.global_q}\t t_0:{_frame_0.global_t.T}")
+        logging.info(f"Pose1 - q_1:{_frame_1.global_q}\t t_1:{_frame_1.global_t.T}")
+        logging.info(f"Scales - 0: {_frame_0.scaleAndShift} | 1: {_frame_1.scaleAndShift}")
+    if verbose > 2:
+        logging.info("Errors after neighbor optimization")
+        keyframe_manager.eval_errors(f_id0, f_id1, uvds0, uvds1, weights)
 
     
-
 
     # ======================= global optimization (BA)=======================
     if f_id1 % BA_step == 0 and f_id1 > 1:
-        print(" ")
-        logging.info(f"=====> Start global frames optimization")
+        if verbose > 0:
+            logging.info(f"=====> Start global frames optimization")
         keyframe_manager.run_BA_with_given_frame(
             BAsolver, f_id1, weights, loss_thres, out_dir_corres
         )
-        
-        logging.info("====> after global optimization")
-        # logging.info(f"q_0:{_frame_0.global_q}\t t_0:{_frame_0.global_t.T}")
-        # logging.info(f"q_1:{_frame_1.global_q}\t t_1:{_frame_1.global_t.T}")
-        logging.info(f"0: {_frame_0.scaleAndShift} | 1: {_frame_1.scaleAndShift}")
 
         T_0_global = _frame_0.update_global_pose() # Cam_i-1_T_refObj
         T_1_global = _frame_1.update_global_pose() # Cam_i_T_refObj
         T_0to1_opt = T_1_global @ np.linalg.inv(T_0_global)
         _frame_1.set_local_pose(T_0to1_opt)
 
-        # logging.info(">>>>>>>>>> after BA optimization <<<<<<<<<<")
-        # logging.info("Errors after multi-frame optimization")
-        # keyframe_manager.eval_errors(f_id0, f_id1, uvds0, uvds1, weights)
+        if verbose > 1:
+            logging.info("====> after global optimization")
+            logging.info(f"q_0:{_frame_0.global_q}\t t_0:{_frame_0.global_t.T}")
+            logging.info(f"q_1:{_frame_1.global_q}\t t_1:{_frame_1.global_t.T}")
+            logging.info(f"0: {_frame_0.scaleAndShift} | 1: {_frame_1.scaleAndShift}")
+        if verbose > 2:
+            logging.info("Errors after multi-frame optimization")
+            keyframe_manager.eval_errors(f_id0, f_id1, uvds0, uvds1, weights)
 
-    # keyframe_manager.visualize_debug(f_id0, f_id1, uvds0, uvds1, 
-    #     f"iter{f_id0}_after_BA", f"{LOG_DIR}/{seq_name}/BA_corres")
+            keyframe_manager.visualize_debug(f_id0, f_id1, uvds0, uvds1, 
+                f"iter{f_id0}_after_BA", f"{LOG_DIR}/{reader.seq_name}/BA_corres")
 
-    # optimized relative scale and shift
-    # a0_new, b0_new = _frame_0.scaleAndShift
-    # a1_new, b1_new = _frame_1.scaleAndShift
 
     keyframe_manager.check_and_add_keyframe(f_id1)
 
-    logging.info("===================== Tracking Finish =====================")
+    if verbose > 0:
+        logging.info("======== Tracking Finish =====================")
     estimation_t = time.time() - start_time
     
     return False, estimation_t

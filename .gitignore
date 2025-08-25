@@ -1,7 +1,8 @@
 # ============== self defined area ==============
 # Datasets
 data
-third_party
+third_party/ceres*
+third_party/LoFTR
 results
 logs
 
