@@ -14,7 +14,7 @@
     <sup>3</sup>Microsoft,
     <sup>4</sup>HUN-REN SZTAKI
   </p>
-  <h3 align="center"><a href="">Paper</a> | <a href="https://monotracker827.github.io">Project Page</a> </h3>
+  <h3 align="center"><a href="https://bmva-archive.org.uk/bmvc/2025/assets/papers/Paper_827/paper.pdf">Paper</a> | <a href="https://monotracker827.github.io">Project Page</a> </h3>
   <div align="center"></div>
 </p>
 
@@ -23,13 +23,17 @@ This is the official implementation of the BMVC2025 paper **MonoTracker**.
 ### BibTex
 
 Coming soon...
-<!-- <pre><code>
-@inproceedings{engelmann2024opennerf,
-   title={{OpenNerf: Open Set 3D Neural Scene Segmentation with Pixel-Wise Features and Rendered Novel Views}},
-   author={Engelmann, Francis and Manhardt, Fabian and Niemeyer, Michael and Tateno, Keisuke and Pollefeys, Marc and Tombari, Federico},
-   booktitle={International Conference on Learning Representations (ICLR)},
-   year={2024}
-}</code></pre> -->
+<pre><code>
+  @inproceedings{Deng_2025_BMVC,
+  author    = {Zilong Deng and Shaochang Tan and Zuria Bauer and Daniel Barath and Marc Pollefeys},
+  title     = {MonoTracker: Monocular RGB-Only 6D Tracking of Unknown Object},
+  booktitle = {36th British Machine Vision Conference 2025, {BMVC} 2025, Sheffield, UK, November 24-27, 2025},
+  publisher = {BMVA},
+  year      = {2025},
+  url       = {https://bmva-archive.org.uk/bmvc/2025/assets/papers/Paper_827/paper.pdf}
+  }
+}
+</code></pre>
 
 ## Installation
 
